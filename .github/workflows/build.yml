@@ -1,4 +1,4 @@
-name: minio-build-test-docker-amd64
+name: MinIO Build
 
 on:
   workflow_dispatch:
