@@ -73,3 +73,27 @@ jobs:
         working-directory: minio-src
         run: |
           docker build -t minio-under-test:amd64 .
+
+
+      - name: Docker smoke test
+        run: |
+          set -euo pipefail
+          cid=$(docker run -d --rm \
+            -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER=minio \
+            -e MINIO_ROOT_PASSWORD=minio123 \
+            minio-under-test:amd64 server /data --console-address ":9001")
+
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
+            if [ "$code" = "200" ]; then break; fi
+            if [ "$i" = "60" ]; then
+              echo "MinIO not ready. Logs:"
+              docker logs "$cid" || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null
+          docker stop "$cid" >/dev/null
