@@ -79,7 +79,7 @@ jobs:
           export PATH="$PATH:$GOPATH/bin"
           go install aead.dev/minisign/cmd/minisign@v0.2.1
 
-          # ✅ Только первая строка, иначе схватит linux/amd64, AGPLv3, ...
+          # Только первая строка (иначе схватит linux/amd64, AGPLv3, ...)
           RELEASE_TAG="$(./minio --version | head -n1 | awk '{print $3}')"
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
 
@@ -91,13 +91,19 @@ jobs:
 
           # ---- minio artifacts: minio-${TARGETARCH}.${RELEASE}* ----
           cp -f ./minio "minio-amd64.${RELEASE_TAG}"
-          sha256sum "minio-amd64.${RELEASE_TAG}" > "minio-amd64.${RELEASE_TAG}.sha256sum"
+
+          # ВАЖНО: внутри sha256sum указываем имя "minio", т.к. в Dockerfile кладём в /go/bin/minio
+          sha256sum "minio-amd64.${RELEASE_TAG}" | awk '{print $1"  minio"}' > "minio-amd64.${RELEASE_TAG}.sha256sum"
+
           minisign -S -m "minio-amd64.${RELEASE_TAG}" -s minisign.key < .passphrase
 
           # ---- mc artifacts: mc-${TARGETARCH}* ----
           curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc-amd64"
           chmod +x "mc-amd64"
-          sha256sum "mc-amd64" > "mc-amd64.sha256sum"
+
+          # ВАЖНО: внутри sha256sum указываем имя "mc", т.к. в Dockerfile кладём в /go/bin/mc
+          sha256sum "mc-amd64" | awk '{print $1"  mc"}' > "mc-amd64.sha256sum"
+
           minisign -S -m "mc-amd64" -s minisign.key < .passphrase
 
           # sanity
