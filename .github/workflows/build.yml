@@ -2,11 +2,6 @@ name: MinIO Build
 
 on:
   workflow_dispatch:
-    inputs:
-      build-tag:
-        description: "Tag to build (optional)"
-        required: false
-        default: ""
 
 env:
   # Что собирать из upstream:
