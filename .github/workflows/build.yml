@@ -115,7 +115,7 @@ jobs:
           : "${MINISIGN_PUBKEY:?Missing secret MINISIGN_PUBKEY}"
 
           docker build \
-            -f ../docker/Dockerfile.release.local \
+            -f ../Dockerfile.release.local \
             --build-arg TARGETARCH=amd64 \
             --build-arg RELEASE="${RELEASE_TAG}" \
             --build-arg MINISIGN_PUBKEY="${MINISIGN_PUBKEY}" \
