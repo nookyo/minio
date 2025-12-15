@@ -10,25 +10,26 @@ on:
 
 env:
   MINIO_UPSTREAM_REPO: minio/minio
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/minio
 
 jobs:
   build_test_docker:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
 
     steps:
-    #   - name: Checkout this repo
-    #     uses: actions/checkout@v4
-    #     with:
-    #       fetch-depth: 0
-
-      - name: Checkout upstream MinIO
-        uses: actions/checkout@v6
+      # 1) Чекаутим ТВОЙ репо (нужен для docker/Dockerfile.release.local и patches/)
+      - name: Checkout this repo
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.ref }}
+          fetch-depth: 0
+
+      # 2) Чекаутим upstream MinIO в подкаталог
+      - name: Checkout upstream MinIO
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MINIO_UPSTREAM_REPO }}
+          ref: ${{ inputs.upstream_ref }}
           path: minio-src
           fetch-depth: 0
 
@@ -48,36 +49,71 @@ jobs:
             echo "No patches/*.patch found, skip."
           fi
 
-    #   - name: Unit tests
-    #     working-directory: minio-src
-    #     run: |
-    #       go test ./...
+      - name: Unit tests
+        working-directory: minio-src
+        run: |
+          go test ./...
 
       - name: Build minio (linux/amd64)
         working-directory: minio-src
         run: |
-          # Чтобы версия была RELEASE.* вместо DEVELOPMENT.*
+          set -euo pipefail
           export MINIO_RELEASE=RELEASE
-
-          # ВАЖНО: ldflags генерим на host (без GOOS/GOARCH)
           LDFLAGS="$(env GOOS= GOARCH= go run buildscripts/gen-ldflags.go)"
-
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build -trimpath -tags kqueue -ldflags "$LDFLAGS" -o minio .
+          ./minio --version
 
-          ./minio --version || true
-
-    #   - name: Binary smoke test (resolve-right-versions)
-    #     working-directory: minio-src
-    #     run: |
-    #       sudo apt-get update
-    #       sudo apt-get install -y git
-    #       bash buildscripts/resolve-right-versions.sh
-
-      - name: Docker build (amd64) via make
+      # 3) Подготовка и подпись артефактов для Dockerfile.release.local
+      - name: Prepare + sign artifacts (minio + mc)
         working-directory: minio-src
+        env:
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+          MINISIGN_PASSPHRASE: ${{ secrets.MINISIGN_PASSPHRASE }}
         run: |
-          TAG=minio-under-test:amd64 make docker
+          set -euo pipefail
+          : "${MINISIGN_PRIVATE_KEY:?Missing secret MINISIGN_PRIVATE_KEY}"
+          : "${MINISIGN_PASSPHRASE:?Missing secret MINISIGN_PASSPHRASE}"
+
+          export GOPATH=/tmp/gopath
+          export PATH="$PATH:$GOPATH/bin"
+          go install aead.dev/minisign/cmd/minisign@v0.2.1
+
+          # RELEASE_TAG берём из бинаря
+          RELEASE_TAG="$(./minio --version | awk '{print $3}')"
+          echo "RELEASE_TAG=$RELEASE_TAG" | tee -a "$GITHUB_ENV"
+
+          # ---- minio artifacts: minio-${TARGETARCH}.${RELEASE}* ----
+          cp -f ./minio "minio-amd64.${RELEASE_TAG}"
+          sha256sum "minio-amd64.${RELEASE_TAG}" > "minio-amd64.${RELEASE_TAG}.sha256sum"
+
+          printf "%s" "${MINISIGN_PRIVATE_KEY}" > minisign.key
+          chmod 600 minisign.key
+          printf "%s" "${MINISIGN_PASSPHRASE}" | minisign -S -m "minio-amd64.${RELEASE_TAG}" -s minisign.key
+
+          # ---- mc artifacts: mc-${TARGETARCH}* ----
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc-amd64"
+          chmod +x "mc-amd64"
+          sha256sum "mc-amd64" > "mc-amd64.sha256sum"
+          printf "%s" "${MINISIGN_PASSPHRASE}" | minisign -S -m "mc-amd64" -s minisign.key
+
+          ls -la minio-amd64.${RELEASE_TAG}* mc-amd64*
+
+      # 4) Build образа через твой Dockerfile.release.local
+      - name: Docker build (release.local, amd64)
+        working-directory: minio-src
+        env:
+          MINISIGN_PUBKEY: ${{ secrets.MINISIGN_PUBKEY }}
+        run: |
+          set -euo pipefail
+          : "${MINISIGN_PUBKEY:?Missing secret MINISIGN_PUBKEY}"
+
+          docker build \
+            -f ../docker/Dockerfile.release.local \
+            --build-arg TARGETARCH=amd64 \
+            --build-arg RELEASE="${RELEASE_TAG}" \
+            --build-arg MINISIGN_PUBKEY="${MINISIGN_PUBKEY}" \
+            -t "minio-under-test:${RELEASE_TAG}-amd64" .
 
       - name: Docker smoke test
         run: |
@@ -86,13 +122,11 @@ jobs:
             -p 9000:9000 -p 9001:9001 \
             -e MINIO_ROOT_USER=minio \
             -e MINIO_ROOT_PASSWORD=minio123 \
-            minio-under-test:amd64 server /data --console-address ":9001")
+            "minio-under-test:${RELEASE_TAG}-amd64" server /data --console-address ":9001")
 
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
-            if [ "$code" = "200" ]; then
-              break
-            fi
+            if [ "$code" = "200" ]; then break; fi
             if [ "$i" = "60" ]; then
               echo "MinIO not ready. Logs:"
               docker logs "$cid" || true
@@ -103,4 +137,3 @@ jobs:
 
           curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null
           docker stop "$cid" >/dev/null
-
