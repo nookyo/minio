@@ -1,0 +1,68 @@
+name: minio-build-test-docker-amd64
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-tag:
+        description: "Tag to build (optional)"
+        required: false
+        default: ""
+
+env:
+  # Что собирать из upstream:
+  MINIO_UPSTREAM_REPO: minio/minio
+  MINIO_UPSTREAM_REF: ${{ github.event.ref}}
+
+  # Куда пушить образ:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/minio
+
+jobs:
+  build_test_docker_push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # 1) Ваш репо (patches/, workflows/, etc.)
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2) Upstream MinIO в подкаталог
+      - name: Checkout upstream MinIO
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.MINIO_UPSTREAM_REF }}
+          path: minio-src
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+
+      - name: Apply patches (optional)
+        run: |
+          set -e
+          if compgen -G "patches/*.patch" > /dev/null; then
+            cd minio-src
+            git apply ../patches/*.patch
+          else
+            echo "No patches/*.patch found, skip."
+          fi
+
+      - name: Unit tests
+        working-directory: minio-src
+        run: |
+          go test ./...
+
+      - name: Build minio (linux/amd64)
+        working-directory: minio-src
+        run: |
+          LDFLAGS="$(env GOOS= GOARCH= go run buildscripts/gen-ldflags.go)"
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+            go build -trimpath -tags kqueue -ldflags "$LDFLAGS" -o minio .
+          ./minio --version || true
