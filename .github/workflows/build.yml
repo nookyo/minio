@@ -147,5 +147,15 @@ jobs:
             sleep 1
           done
 
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o /tmp/mc
+          chmod +x /tmp/mc
+
+          /tmp/mc alias set local http://127.0.0.1:9000 minio minio123
+          /tmp/mc mb local/testbucket
+
+          echo "hello" > /tmp/hello.txt
+          /tmp/mc cp /tmp/hello.txt local/testbucket/hello.txt
+          /tmp/mc cat local/testbucket/hello.txt | grep -q "hello"
+
           curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null
           docker stop "$cid" >/dev/null
