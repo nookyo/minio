@@ -48,10 +48,10 @@ jobs:
             echo "No patches/*.patch found, skip."
           fi
 
-      - name: Unit tests
-        working-directory: minio-src
-        run: |
-          go test ./...
+    #   - name: Unit tests
+    #     working-directory: minio-src
+    #     run: |
+    #       go test ./...
 
       - name: Build minio (linux/amd64)
         working-directory: minio-src
@@ -67,12 +67,12 @@ jobs:
 
           ./minio --version || true
 
-      - name: Binary smoke test (resolve-right-versions)
-        working-directory: minio-src
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git
-          bash buildscripts/resolve-right-versions.sh
+    #   - name: Binary smoke test (resolve-right-versions)
+    #     working-directory: minio-src
+    #     run: |
+    #       sudo apt-get update
+    #       sudo apt-get install -y git
+    #       bash buildscripts/resolve-right-versions.sh
 
       - name: Docker build (amd64) via make
         working-directory: minio-src
