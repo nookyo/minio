@@ -79,22 +79,30 @@ jobs:
           export PATH="$PATH:$GOPATH/bin"
           go install aead.dev/minisign/cmd/minisign@v0.2.1
 
-          # ✅ Берём ТОЛЬКО первую строку, иначе получаем linux/amd64, AGPLv3, etc.
+          # ✅ Только первая строка, иначе схватит linux/amd64, AGPLv3, ...
           RELEASE_TAG="$(./minio --version | head -n1 | awk '{print $3}')"
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
 
-          cp -f ./minio "minio-amd64.${RELEASE_TAG}"
-          sha256sum "minio-amd64.${RELEASE_TAG}" > "minio-amd64.${RELEASE_TAG}.sha256sum"
-
+          # ключ + пароль (файлом, чтобы minisign не падал с EOF)
           printf "%s" "${MINISIGN_PRIVATE_KEY}" > minisign.key
           chmod 600 minisign.key
-          printf "%s" "${MINISIGN_PASSPHRASE}" | minisign -S -m "minio-amd64.${RELEASE_TAG}" -s minisign.key
+          printf "%s\n" "${MINISIGN_PASSPHRASE}" > .passphrase
+          chmod 600 .passphrase
 
+          # ---- minio artifacts: minio-${TARGETARCH}.${RELEASE}* ----
+          cp -f ./minio "minio-amd64.${RELEASE_TAG}"
+          sha256sum "minio-amd64.${RELEASE_TAG}" > "minio-amd64.${RELEASE_TAG}.sha256sum"
+          minisign -S -m "minio-amd64.${RELEASE_TAG}" -s minisign.key < .passphrase
+
+          # ---- mc artifacts: mc-${TARGETARCH}* ----
           curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc-amd64"
           chmod +x "mc-amd64"
           sha256sum "mc-amd64" > "mc-amd64.sha256sum"
-          printf "%s" "${MINISIGN_PASSPHRASE}" | minisign -S -m "mc-amd64" -s minisign.key
+          minisign -S -m "mc-amd64" -s minisign.key < .passphrase
 
+          # sanity
+          test -f "minio-amd64.${RELEASE_TAG}.minisig"
+          test -f "mc-amd64.minisig"
           ls -la minio-amd64.${RELEASE_TAG}* mc-amd64*
 
       # 4) Build образа через твой Dockerfile.release.local
