@@ -66,3 +66,10 @@ jobs:
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build -trimpath -tags kqueue -ldflags "$LDFLAGS" -o minio .
           ./minio --version || true
+
+      - name: Binary smoke test (resolve-right-versions)
+        working-directory: minio-src
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git
+          bash buildscripts/resolve-right-versions.sh
