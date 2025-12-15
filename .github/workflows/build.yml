@@ -73,3 +73,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git
           bash buildscripts/resolve-right-versions.sh
+
+      - name: Docker build (amd64)
+        working-directory: minio-src
+        run: |
+          docker build -t minio-under-test:amd64 .
