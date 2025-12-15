@@ -57,6 +57,7 @@ jobs:
       - name: Build minio (linux/amd64)
         working-directory: minio-src
         run: |
+          export MINIO_RELEASE=RELEASE
           LDFLAGS="$(env GOOS= GOARCH= go run buildscripts/gen-ldflags.go)"
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build -trimpath -tags kqueue -ldflags "$LDFLAGS" -o minio .
