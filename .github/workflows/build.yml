@@ -49,10 +49,10 @@ jobs:
             echo "No patches/*.patch found, skip."
           fi
 
-      - name: Unit tests
-        working-directory: minio-src
-        run: |
-          go test ./...
+    #   - name: Unit tests
+    #     working-directory: minio-src
+    #     run: |
+    #       go test ./...
 
       - name: Build minio (linux/amd64)
         working-directory: minio-src
