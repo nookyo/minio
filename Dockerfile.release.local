@@ -31,7 +31,22 @@ RUN minisign -Vqm /go/bin/minio -x /go/bin/minio.minisig -P "${MINISIGN_PUBKEY}"
 
 FROM alpine:3.22
 
+ARG RELEASE
+
+LABEL name="MinIO-Custom" \
+      vendor="Custom Build" \
+      version="${RELEASE}" \
+      summary="MinIO with custom patches - S3-compatible object storage"
+
 RUN apk add -U --no-cache ca-certificates bash
+
+ENV MINIO_ACCESS_KEY_FILE=access_key \
+    MINIO_SECRET_KEY_FILE=secret_key \
+    MINIO_ROOT_USER_FILE=access_key \
+    MINIO_ROOT_PASSWORD_FILE=secret_key \
+    MINIO_KMS_SECRET_KEY_FILE=kms_master_key \
+    MINIO_CONFIG_ENV_FILE=config.env \
+    MC_CONFIG_DIR=/tmp/.mc
 
 COPY --from=build /go/bin/minio* /usr/bin/
 COPY --from=build /go/bin/mc* /usr/bin/
