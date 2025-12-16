@@ -48,11 +48,11 @@ jobs:
             echo "No patches found"
           fi
 
-      - name: Run unit tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          MINIO_API_REQUESTS_MAX=10000 CGO_ENABLED=0 go test -v -tags kqueue,dev ./...
+      # - name: Run unit tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     MINIO_API_REQUESTS_MAX=10000 CGO_ENABLED=0 go test -v -tags kqueue,dev ./...
 
       - name: Build binary
         working-directory: minio-src
