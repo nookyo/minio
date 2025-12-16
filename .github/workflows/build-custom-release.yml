@@ -54,6 +54,17 @@ jobs:
       #     set -euo pipefail
       #     MINIO_API_REQUESTS_MAX=10000 CGO_ENABLED=0 go test -v -tags kqueue,dev ./...
 
+      # Uncomment below for race condition testing (adds ~20 min)
+      # - name: Run race tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     export GORACE="history_size=7"
+      #     export MINIO_API_REQUESTS_MAX=10000
+      #     for d in $(go list ./...); do
+      #       CGO_ENABLED=1 go test -v -race --timeout 100m "$d"
+      #     done
+
       - name: Build binary
         working-directory: minio-src
         run: |
@@ -76,6 +87,12 @@ jobs:
           curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc-amd64"
           chmod +x "mc-amd64"
           sha256sum "mc-amd64" | awk '{print $1"  mc"}' > "mc-amd64.sha256sum"
+
+      - name: Run integration tests
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          bash buildscripts/verify-build.sh
 
       - name: Build Docker image
         working-directory: minio-src
