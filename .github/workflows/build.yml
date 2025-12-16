@@ -18,13 +18,11 @@ jobs:
       contents: read
 
     steps:
-      # 1) Чекаутим ТВОЙ репо (нужен для docker/Dockerfile.release.local и patches/)
       - name: Checkout this repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2) Чекаутим upstream MinIO в подкаталог
       - name: Checkout upstream MinIO
         uses: actions/checkout@v4
         with:
@@ -49,10 +47,10 @@ jobs:
             echo "No patches/*.patch found, skip."
           fi
 
-      #   - name: Unit tests
-      #     working-directory: minio-src
-      #     run: |
-      #       go test ./...
+      - name: Unit tests
+        working-directory: minio-src
+        run: |
+          go test ./...
 
       - name: Build minio (linux/amd64)
         working-directory: minio-src
@@ -64,7 +62,6 @@ jobs:
             go build -trimpath -tags kqueue -ldflags "$LDFLAGS" -o minio .
           ./minio --version
 
-      # 3) Подготовка и подпись артефактов для Dockerfile.release.local
       - name: Prepare + sign artifacts (minio + mc)
         working-directory: minio-src
         env:
@@ -79,11 +76,9 @@ jobs:
           export PATH="$PATH:$GOPATH/bin"
           go install aead.dev/minisign/cmd/minisign@v0.2.1
 
-          # Только первая строка (иначе схватит linux/amd64, AGPLv3, ...)
           RELEASE_TAG="$(./minio --version | head -n1 | awk '{print $3}')"
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
 
-          # ключ + пароль (файлом, чтобы minisign не падал с EOF)
           printf "%s" "${MINISIGN_PRIVATE_KEY}" > minisign.key
           chmod 600 minisign.key
           printf "%s\n" "${MINISIGN_PASSPHRASE}" > .passphrase
@@ -92,7 +87,6 @@ jobs:
           # ---- minio artifacts: minio-${TARGETARCH}.${RELEASE}* ----
           cp -f ./minio "minio-amd64.${RELEASE_TAG}"
 
-          # ВАЖНО: внутри sha256sum указываем имя "minio", т.к. в Dockerfile кладём в /go/bin/minio
           sha256sum "minio-amd64.${RELEASE_TAG}" | awk '{print $1"  minio"}' > "minio-amd64.${RELEASE_TAG}.sha256sum"
 
           minisign -S -m "minio-amd64.${RELEASE_TAG}" -s minisign.key < .passphrase
@@ -101,7 +95,6 @@ jobs:
           curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc-amd64"
           chmod +x "mc-amd64"
 
-          # ВАЖНО: внутри sha256sum указываем имя "mc", т.к. в Dockerfile кладём в /go/bin/mc
           sha256sum "mc-amd64" | awk '{print $1"  mc"}' > "mc-amd64.sha256sum"
 
           minisign -S -m "mc-amd64" -s minisign.key < .passphrase
@@ -111,7 +104,6 @@ jobs:
           test -f "mc-amd64.minisig"
           ls -la minio-amd64.${RELEASE_TAG}* mc-amd64*
 
-      # 4) Build образа через твой Dockerfile.release.local
       - name: Docker build (release.local, amd64)
         working-directory: minio-src
         env:
