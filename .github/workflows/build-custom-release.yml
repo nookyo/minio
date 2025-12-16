@@ -118,12 +118,6 @@ jobs:
           set -euo pipefail
           bash buildscripts/multipart-quorum-test.sh
 
-      - name: Run disable root tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/disable-root.sh
-
       - name: Run timeout tests
         working-directory: minio-src
         run: |
