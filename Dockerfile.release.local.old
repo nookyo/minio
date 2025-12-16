@@ -16,12 +16,18 @@ RUN apk add -U --no-cache ca-certificates bash && \
 #   minio-amd64.<RELEASE>.sha256sum
 
 COPY minio-${TARGETARCH}.${RELEASE} /go/bin/minio
+COPY minio-${TARGETARCH}.${RELEASE}.minisig /go/bin/minio.minisig
 COPY minio-${TARGETARCH}.${RELEASE}.sha256sum /go/bin/minio.sha256sum
 
 COPY mc-${TARGETARCH} /go/bin/mc
+COPY mc-${TARGETARCH}.minisig /go/bin/mc.minisig
 COPY mc-${TARGETARCH}.sha256sum /go/bin/mc.sha256sum
 
 RUN cd /go/bin && sha256sum -c minio.sha256sum && sha256sum -c mc.sha256sum
+
+ARG MINISIGN_PUBKEY
+RUN minisign -Vqm /go/bin/minio -x /go/bin/minio.minisig -P "${MINISIGN_PUBKEY}" && \
+    minisign -Vqm /go/bin/mc    -x /go/bin/mc.minisig    -P "${MINISIGN_PUBKEY}"
 
 FROM alpine:3.22
 
