@@ -138,10 +138,9 @@ jobs:
             -f ../Dockerfile.release.local \
             --build-arg TARGETARCH=amd64 \
             --build-arg RELEASE="${{ env.RELEASE_TAG }}" \
-            --build-arg MINISIGN_PUBKEY="untrusted comment: no verification" \
             -t "minio:${{ env.RELEASE_TAG }}-amd64" .
 
-      - name: Test Docker image
+      - name: Test Docker image - smoke test
         run: |
           set -euo pipefail
           cid=$(docker run -d --rm \
@@ -165,4 +164,86 @@ jobs:
           /tmp/mc cat local/testbucket/test.txt | grep -q test
 
           docker stop "$cid" >/dev/null
-          echo "✓ Tests passed"
+          echo "✓ Smoke tests passed"
+
+      - name: Test Docker image - erasure mode (Docker Compose)
+        run: |
+          set -euo pipefail
+          cat > /tmp/docker-compose.yml << 'EOF'
+          version: '3.7'
+          services:
+            minio1:
+              image: "minio:${{ env.RELEASE_TAG }}-amd64"
+              ports:
+                - "9000:9000"
+              environment:
+                MINIO_ROOT_USER: minioadmin
+                MINIO_ROOT_PASSWORD: minioadmin
+              command: server http://minio{1...4}/data --address ":9000"
+              volumes:
+                - /tmp/minio1:/data
+              networks:
+                - minio-net
+            minio2:
+              image: "minio:${{ env.RELEASE_TAG }}-amd64"
+              ports:
+                - "9001:9000"
+              environment:
+                MINIO_ROOT_USER: minioadmin
+                MINIO_ROOT_PASSWORD: minioadmin
+              command: server http://minio{1...4}/data --address ":9000"
+              volumes:
+                - /tmp/minio2:/data
+              networks:
+                - minio-net
+            minio3:
+              image: "minio:${{ env.RELEASE_TAG }}-amd64"
+              ports:
+                - "9002:9000"
+              environment:
+                MINIO_ROOT_USER: minioadmin
+                MINIO_ROOT_PASSWORD: minioadmin
+              command: server http://minio{1...4}/data --address ":9000"
+              volumes:
+                - /tmp/minio3:/data
+              networks:
+                - minio-net
+            minio4:
+              image: "minio:${{ env.RELEASE_TAG }}-amd64"
+              ports:
+                - "9003:9000"
+              environment:
+                MINIO_ROOT_USER: minioadmin
+                MINIO_ROOT_PASSWORD: minioadmin
+              command: server http://minio{1...4}/data --address ":9000"
+              volumes:
+                - /tmp/minio4:/data
+              networks:
+                - minio-net
+          networks:
+            minio-net:
+              driver: bridge
+          EOF
+          
+          docker-compose -f /tmp/docker-compose.yml up -d
+          sleep 10
+          
+          # Test erasure mode
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
+            [ "$code" = "200" ] && break
+            [ "$i" = "30" ] && { echo "Timeout waiting for MinIO"; exit 1; }
+            sleep 1
+          done
+          
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o /tmp/mc
+          chmod +x /tmp/mc
+          /tmp/mc alias set erosure http://127.0.0.1:9000 minioadmin minioadmin
+          /tmp/mc mb erosure/testbucket
+          echo "erasure-test" | /tmp/mc pipe erosure/testbucket/test.txt
+          /tmp/mc cat erosure/testbucket/test.txt | grep -q erasure-test
+          
+          docker-compose -f /tmp/docker-compose.yml down
+          echo "✓ Erasure mode tests passed"
+
+      - name: Upload artifacts
