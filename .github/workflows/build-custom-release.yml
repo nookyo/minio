@@ -219,7 +219,7 @@ jobs:
               driver: bridge
           EOF
 
-          docker-compose -f /tmp/docker-compose.yml up -d
+          docker compose -f /tmp/docker-compose.yml up -d
           sleep 10
 
           # Test erasure mode
@@ -237,6 +237,6 @@ jobs:
           echo "erasure-test" | /tmp/mc pipe erosure/testbucket/test.txt
           /tmp/mc cat erosure/testbucket/test.txt | grep -q erasure-test
 
-          docker-compose -f /tmp/docker-compose.yml down
+          docker compose -f /tmp/docker-compose.yml down
           echo "✓ Erasure mode tests passed"
 
