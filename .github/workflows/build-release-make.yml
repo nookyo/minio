@@ -48,6 +48,18 @@ jobs:
             echo "No patches found"
           fi
 
+      - name: Build binary (Makefile)
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          export MINIO_RELEASE=RELEASE
+          make build
+
+          # Get version from binary
+          RELEASE_TAG=$(./minio --version | head -n1 | awk '{print $3}')
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+          echo "Release: ${RELEASE_TAG}"
+
       - name: Run integration tests
         working-directory: minio-src
         run: |
