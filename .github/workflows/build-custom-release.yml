@@ -224,10 +224,10 @@ jobs:
             minio-net:
               driver: bridge
           EOF
-          
+
           docker-compose -f /tmp/docker-compose.yml up -d
           sleep 10
-          
+
           # Test erasure mode
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
@@ -235,15 +235,14 @@ jobs:
             [ "$i" = "30" ] && { echo "Timeout waiting for MinIO"; exit 1; }
             sleep 1
           done
-          
+
           curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o /tmp/mc
           chmod +x /tmp/mc
           /tmp/mc alias set erosure http://127.0.0.1:9000 minioadmin minioadmin
           /tmp/mc mb erosure/testbucket
           echo "erasure-test" | /tmp/mc pipe erosure/testbucket/test.txt
           /tmp/mc cat erosure/testbucket/test.txt | grep -q erasure-test
-          
+
           docker-compose -f /tmp/docker-compose.yml down
           echo "✓ Erasure mode tests passed"
 
-      - name: Upload artifacts
