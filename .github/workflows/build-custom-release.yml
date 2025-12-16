@@ -1,0 +1,115 @@
+name: Build Custom MinIO Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: "Upstream ref (tag/branch/commit) from minio/minio"
+        required: true
+        default: "master"
+
+env:
+  MINIO_UPSTREAM_REPO: minio/minio
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout upstream MinIO
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MINIO_UPSTREAM_REPO }}
+          ref: ${{ inputs.upstream_ref }}
+          path: minio-src
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+
+      - name: Apply custom patches
+        run: |
+          set -euo pipefail
+          if compgen -G "patches/*.patch" > /dev/null; then
+            cd minio-src
+            echo "Applying patches..."
+            git apply ../patches/*.patch
+          else
+            echo "No patches found"
+          fi
+
+      - name: Run unit tests
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          MINIO_API_REQUESTS_MAX=10000 CGO_ENABLED=0 go test -v -tags kqueue,dev ./...
+
+      - name: Build binary
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          export MINIO_RELEASE=RELEASE
+          LDFLAGS="$(env GOOS= GOARCH= go run buildscripts/gen-ldflags.go)"
+
+          # Extract release tag from LDFLAGS
+          RELEASE_TAG=$(echo "$LDFLAGS" | grep -oP 'cmd\.ReleaseTag=\K[^ ]+')
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+          echo "Release: ${RELEASE_TAG}"
+
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -tags kqueue -ldflags "$LDFLAGS" -o minio .
+
+          # Prepare artifacts
+          cp -f ./minio "minio-amd64.${RELEASE_TAG}"
+          sha256sum "minio-amd64.${RELEASE_TAG}" | awk '{print $1"  minio"}' > "minio-amd64.${RELEASE_TAG}.sha256sum"
+
+          # Download mc
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc-amd64"
+          chmod +x "mc-amd64"
+          sha256sum "mc-amd64" | awk '{print $1"  mc"}' > "mc-amd64.sha256sum"
+
+      - name: Build Docker image
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          docker build \
+            -f ../Dockerfile.release.local \
+            --build-arg TARGETARCH=amd64 \
+            --build-arg RELEASE="${{ env.RELEASE_TAG }}" \
+            --build-arg MINISIGN_PUBKEY="untrusted comment: no verification" \
+            -t "minio:${{ env.RELEASE_TAG }}-amd64" .
+
+      - name: Test Docker image
+        run: |
+          set -euo pipefail
+          cid=$(docker run -d --rm \
+            -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            "minio:${{ env.RELEASE_TAG }}-amd64" server /data --console-address ":9001")
+
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
+            [ "$code" = "200" ] && break
+            [ "$i" = "60" ] && { docker logs "$cid"; exit 1; }
+            sleep 1
+          done
+
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o /tmp/mc
+          chmod +x /tmp/mc
+          /tmp/mc alias set local http://127.0.0.1:9000 minioadmin minioadmin
+          /tmp/mc mb local/testbucket
+          echo "test" | /tmp/mc pipe local/testbucket/test.txt
+          /tmp/mc cat local/testbucket/test.txt | grep -q test
+
+          docker stop "$cid" >/dev/null
+          echo "✓ Tests passed"
