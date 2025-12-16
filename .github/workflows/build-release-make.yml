@@ -1,0 +1,223 @@
+name: Build MinIO Release (Makefile)
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: "Upstream ref (tag/branch/commit) from minio/minio"
+        required: true
+        default: "master"
+
+env:
+  MINIO_UPSTREAM_REPO: minio/minio
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout upstream MinIO
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MINIO_UPSTREAM_REPO }}
+          ref: ${{ inputs.upstream_ref }}
+          path: minio-src
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+
+      - name: Apply custom patches
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          if compgen -G "../patches/*.patch" > /dev/null; then
+            echo "Applying patches..."
+            git apply ../patches/*.patch
+          else
+            echo "No patches found"
+          fi
+
+      - name: Run integration tests
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          bash buildscripts/verify-build.sh
+
+      - name: Run healing tests
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          bash buildscripts/verify-healing.sh
+
+      - name: Run empty erasure set healing tests
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          bash buildscripts/verify-healing-empty-erasure-set.sh
+
+      - name: Run healing with root disks tests
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          bash buildscripts/verify-healing-with-root-disks.sh
+
+      - name: Run multipart quorum tests
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          bash buildscripts/multipart-quorum-test.sh
+
+      - name: Run disable root tests
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          bash buildscripts/disable-root.sh
+
+      - name: Run timeout tests
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          bash buildscripts/test-timeout.sh
+
+      - name: Build binary and Docker image (Makefile)
+        working-directory: minio-src
+        run: |
+          set -euo pipefail
+          export MINIO_RELEASE=RELEASE
+
+          # Build binary using make
+          make build
+
+          # Get version from binary
+          RELEASE_TAG=$(./minio --version | head -n1 | awk '{print $3}')
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+          echo "Release: ${RELEASE_TAG}"
+
+          # Build Docker image using make
+          # TAG defaults to quay.io/minio/minio:$(VERSION)
+          # Override with custom image name
+          TAG="minio:${RELEASE_TAG}-amd64" make docker
+
+      - name: Test Docker image - smoke test
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          cid=$(docker run -d --rm \
+            -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            "minio:${RELEASE_TAG}-amd64" server /data --console-address ":9001")
+
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
+            [ "$code" = "200" ] && break
+            [ "$i" = "60" ] && { docker logs "$cid"; exit 1; }
+            sleep 1
+          done
+
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o /tmp/mc
+          chmod +x /tmp/mc
+          /tmp/mc alias set local http://127.0.0.1:9000 minioadmin minioadmin
+          /tmp/mc mb local/testbucket
+          echo "test" | /tmp/mc pipe local/testbucket/test.txt
+          /tmp/mc cat local/testbucket/test.txt | grep -q test
+
+          docker stop "$cid" >/dev/null
+          echo "✓ Smoke tests passed"
+
+      - name: Test Docker image - erasure mode (Docker Compose)
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/docker-compose.yml << 'EOF'
+          version: '3.7'
+          services:
+            minio1:
+              image: "minio:REPLACE_TAG-amd64"
+              ports:
+                - "9000:9000"
+              environment:
+                MINIO_ROOT_USER: minioadmin
+                MINIO_ROOT_PASSWORD: minioadmin
+              command: server http://minio{1...4}/data --address ":9000"
+              volumes:
+                - /tmp/minio1:/data
+              networks:
+                - minio-net
+            minio2:
+              image: "minio:REPLACE_TAG-amd64"
+              ports:
+                - "9001:9000"
+              environment:
+                MINIO_ROOT_USER: minioadmin
+                MINIO_ROOT_PASSWORD: minioadmin
+              command: server http://minio{1...4}/data --address ":9000"
+              volumes:
+                - /tmp/minio2:/data
+              networks:
+                - minio-net
+            minio3:
+              image: "minio:REPLACE_TAG-amd64"
+              ports:
+                - "9002:9000"
+              environment:
+                MINIO_ROOT_USER: minioadmin
+                MINIO_ROOT_PASSWORD: minioadmin
+              command: server http://minio{1...4}/data --address ":9000"
+              volumes:
+                - /tmp/minio3:/data
+              networks:
+                - minio-net
+            minio4:
+              image: "minio:REPLACE_TAG-amd64"
+              ports:
+                - "9003:9000"
+              environment:
+                MINIO_ROOT_USER: minioadmin
+                MINIO_ROOT_PASSWORD: minioadmin
+              command: server http://minio{1...4}/data --address ":9000"
+              volumes:
+                - /tmp/minio4:/data
+              networks:
+                - minio-net
+          networks:
+            minio-net:
+              driver: bridge
+          EOF
+
+          # Replace tag placeholder
+          sed -i "s/REPLACE_TAG/${RELEASE_TAG}/g" /tmp/docker-compose.yml
+
+          docker compose -f /tmp/docker-compose.yml up -d
+          sleep 10
+
+          # Test erasure mode
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
+            [ "$code" = "200" ] && break
+            [ "$i" = "30" ] && { echo "Timeout waiting for MinIO"; exit 1; }
+            sleep 1
+          done
+
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o /tmp/mc
+          chmod +x /tmp/mc
+          /tmp/mc alias set erasure http://127.0.0.1:9000 minioadmin minioadmin
+          /tmp/mc mb erasure/testbucket
+          echo "erasure-test" | /tmp/mc pipe erasure/testbucket/test.txt
+          /tmp/mc cat erasure/testbucket/test.txt | grep -q erasure-test
+
+          docker compose -f /tmp/docker-compose.yml down
+          echo "✓ Erasure mode tests passed"
