@@ -102,24 +102,11 @@ jobs:
           set -euo pipefail
           bash buildscripts/test-timeout.sh
 
-      - name: Build binary and Docker image (Makefile)
+      - name: Build Docker image (Makefile)
         working-directory: minio-src
         run: |
           set -euo pipefail
-          export MINIO_RELEASE=RELEASE
-
-          # Build binary using make
-          make build
-
-          # Get version from binary
-          RELEASE_TAG=$(./minio --version | head -n1 | awk '{print $3}')
-          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
-          echo "Release: ${RELEASE_TAG}"
-
-          # Build Docker image using make
-          # TAG defaults to quay.io/minio/minio:$(VERSION)
-          # Override with custom image name
-          TAG="minio:${RELEASE_TAG}-amd64" make docker
+          TAG="minio:${{ env.RELEASE_TAG }}-amd64" make docker
 
       - name: Test Docker image - smoke test
         env:
