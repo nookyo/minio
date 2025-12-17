@@ -37,6 +37,12 @@ jobs:
           go-version: "1.24.x"
           cache: true
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Apply custom patches
         working-directory: minio-src
         run: |
@@ -48,23 +54,31 @@ jobs:
             echo "No patches found"
           fi
 
-      - name: Build binary (Makefile)
+      - name: Build binaries for multiple architectures
         working-directory: minio-src
         run: |
           set -euo pipefail
           export MINIO_RELEASE=RELEASE
-          make build
+          export CGO_ENABLED=0
 
-          # Get version from binary
-          RELEASE_TAG=$(./minio --version | head -n1 | awk '{print $3}')
-          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
-          echo "Release: ${RELEASE_TAG}"
+          # Build for each architecture
+          for arch in amd64 arm64; do
+            echo "Building for linux/${arch}..."
+            GOOS=linux GOARCH=${arch} make build
 
-          # Prepare artifacts expected by Dockerfile.release.local (release-style names)
-          cp -f ./minio "minio.${RELEASE_TAG}"
-          sha256sum "minio.${RELEASE_TAG}" | awk '{print $1"  minio"}' > "minio.${RELEASE_TAG}.sha256sum"
+            # Get version from amd64 binary (first iteration)
+            if [ "${arch}" = "amd64" ]; then
+              RELEASE_TAG=$(./minio --version | head -n1 | awk '{print $3}')
+              echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+              echo "Release: ${RELEASE_TAG}"
+            fi
 
-          # Download mc client and prepare checksum (release name)
+            # Prepare artifacts for each arch
+            cp -f ./minio "minio-${arch}.${RELEASE_TAG:-$(./minio --version | head -n1 | awk '{print $3}')}"
+            sha256sum "minio-${arch}.${RELEASE_TAG:-$(./minio --version | head -n1 | awk '{print $3}')}" | awk '{print $1"  minio"}' > "minio-${arch}.${RELEASE_TAG:-$(./minio --version | head -n1 | awk '{print $3}')}.sha256sum"
+          done
+
+          # Download mc client for amd64 (used in tests)
           curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc"
           chmod +x "mc"
           sha256sum "mc" | awk '{print $1"  mc"}' > "mc.sha256sum"
@@ -105,14 +119,16 @@ jobs:
           set -euo pipefail
           bash buildscripts/test-timeout.sh
 
-      - name: Build Docker image (Makefile)
+      - name: Build multi-arch Docker image
         working-directory: minio-src
         run: |
           set -euo pipefail
-          docker build -f ../Dockerfile.release.local \
-            --build-arg TARGETARCH=amd64 \
+          docker buildx build --load \
+            -f ../Dockerfile.release.local \
             --build-arg RELEASE="${RELEASE_TAG}" \
-            -t "minio:${RELEASE_TAG}-amd64" .
+            --platform linux/amd64,linux/arm64 \
+            -t "minio:${RELEASE_TAG}" \
+            -t "minio:latest" .
 
       - name: Test Docker image - smoke test
         run: |
@@ -121,7 +137,7 @@ jobs:
             -p 9000:9000 -p 9001:9001 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
-            "minio:${RELEASE_TAG}-amd64" server /data --console-address ":9001")
+            "minio:${RELEASE_TAG}" server /data --console-address ":9001")
 
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
@@ -147,7 +163,7 @@ jobs:
           version: '3.7'
           services:
             minio1:
-              image: "minio:REPLACE_TAG-amd64"
+              image: "minio:REPLACE_TAG"
               ports:
                 - "9000:9000"
               environment:
@@ -159,7 +175,7 @@ jobs:
               networks:
                 - minio-net
             minio2:
-              image: "minio:REPLACE_TAG-amd64"
+              image: "minio:REPLACE_TAG"
               ports:
                 - "9001:9000"
               environment:
@@ -171,7 +187,7 @@ jobs:
               networks:
                 - minio-net
             minio3:
-              image: "minio:REPLACE_TAG-amd64"
+              image: "minio:REPLACE_TAG"
               ports:
                 - "9002:9000"
               environment:
@@ -183,7 +199,7 @@ jobs:
               networks:
                 - minio-net
             minio4:
-              image: "minio:REPLACE_TAG-amd64"
+              image: "minio:REPLACE_TAG"
               ports:
                 - "9003:9000"
               environment:
@@ -222,3 +238,4 @@ jobs:
 
           docker compose -f /tmp/docker-compose.yml down
           echo "✓ Erasure mode tests passed"
+
