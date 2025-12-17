@@ -119,16 +119,28 @@ jobs:
       #     set -euo pipefail
       #     bash buildscripts/test-timeout.sh
 
-      - name: Build multi-arch Docker image
+      - name: Build Docker images for each architecture
         working-directory: minio-src
         run: |
           set -euo pipefail
-          docker buildx build --load \
-            -f ../Dockerfile.release.local \
-            --build-arg RELEASE="${RELEASE_TAG}" \
-            --platform linux/amd64,linux/arm64 \
+
+          # Build for each architecture separately (--load doesn't support multi-platform)
+          for arch in amd64 arm64; do
+            echo "Building docker image for ${arch}..."
+            docker buildx build --load \
+              -f ../Dockerfile.release.local \
+              --build-arg TARGETARCH=${arch} \
+              --build-arg RELEASE="${RELEASE_TAG}" \
+              --platform linux/${arch} \
+              -t "minio:${RELEASE_TAG}-${arch}" .
+          done
+
+          # Create multi-arch manifest
+          docker buildx imagetools create \
             -t "minio:${RELEASE_TAG}" \
-            -t "minio:latest" .
+            -t "minio:latest" \
+            "minio:${RELEASE_TAG}-amd64" \
+            "minio:${RELEASE_TAG}-arm64"
 
       - name: Test Docker image - smoke test
         run: |
