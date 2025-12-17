@@ -119,28 +119,35 @@ jobs:
       #     set -euo pipefail
       #     bash buildscripts/test-timeout.sh
 
-      - name: Build Docker images for each architecture
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
+      - name: Build Docker image for testing (amd64 only)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./minio-src
+          file: ./Dockerfile.release.local
+          platforms: linux/amd64
+          load: true
+          tags: |
+            minio:${{ env.RELEASE_TAG }}
+            minio:latest
+          build-args: |
+            RELEASE=${{ env.RELEASE_TAG }}
+            TARGETARCH=amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-          # Build for each architecture separately (--load doesn't support multi-platform)
-          for arch in amd64 arm64; do
-            echo "Building docker image for ${arch}..."
-            docker buildx build --load \
-              -f ../Dockerfile.release.local \
-              --build-arg TARGETARCH=${arch} \
-              --build-arg RELEASE="${RELEASE_TAG}" \
-              --platform linux/${arch} \
-              -t "minio:${RELEASE_TAG}-${arch}" .
-          done
-
-          # Create multi-arch manifest
-          docker buildx imagetools create \
-            -t "minio:${RELEASE_TAG}" \
-            -t "minio:latest" \
-            "minio:${RELEASE_TAG}-amd64" \
-            "minio:${RELEASE_TAG}-arm64"
+      - name: Build multi-arch Docker images
+        uses: docker/build-push-action@v6
+        with:
+          context: ./minio-src
+          file: ./Dockerfile.release.local
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: |
+            minio:${{ env.RELEASE_TAG }}-multiarch
+          build-args: |
+            RELEASE=${{ env.RELEASE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Test Docker image - smoke test
         run: |
