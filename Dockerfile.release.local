@@ -15,20 +15,25 @@ RUN apk add -U --no-cache ca-certificates curl bash && \
     true
 
 # Expected artifacts (prepared by CI/workflow):
-#   minio.<RELEASE>
-#   minio.<RELEASE>.sha256sum
+#   minio-<arch>.<RELEASE>
+#   minio-<arch>.<RELEASE>.sha256sum
 #   mc
 #   mc.sha256sum
 
-# copy locally-built binaries into build stage
-COPY minio.${RELEASE} /go/bin/minio
-COPY minio.${RELEASE}.sha256sum /go/bin/minio.sha256sum
+# copy locally-built binaries into build stage (use TARGETARCH for multi-platform)
+COPY minio-${TARGETARCH}.${RELEASE} /go/bin/minio
+COPY minio-${TARGETARCH}.${RELEASE}.sha256sum /go/bin/minio.sha256sum
 
 COPY mc /go/bin/mc
 COPY mc.sha256sum /go/bin/mc.sha256sum
 
 # verify checksums (integrity check only)
-RUN cd /go/bin && chmod +x /go/bin/minio && chmod +x /go/bin/mc && sha256sum -c minio.sha256sum && sha256sum -c mc.sha256sum
+# sha256sum files contain full filenames (minio-${TARGETARCH}.${RELEASE}), need to rename for verification
+RUN cd /go/bin && \
+    mv minio minio-${TARGETARCH}.${RELEASE} && \
+    chmod +x /go/bin/minio-${TARGETARCH}.${RELEASE} && chmod +x /go/bin/mc && \
+    sha256sum -c minio.sha256sum && sha256sum -c mc.sha256sum && \
+    mv minio-${TARGETARCH}.${RELEASE} minio
 
 # optionally include download-static-curl script if present and make static curl
 COPY dockerscripts/download-static-curl.sh /build/download-static-curl

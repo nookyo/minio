@@ -75,7 +75,7 @@ jobs:
 
             # Prepare artifacts for each arch
             cp -f ./minio "minio-${arch}.${RELEASE_TAG:-$(./minio --version | head -n1 | awk '{print $3}')}"
-            sha256sum "minio-${arch}.${RELEASE_TAG:-$(./minio --version | head -n1 | awk '{print $3}')}" | awk '{print $1"  minio"}' > "minio-${arch}.${RELEASE_TAG:-$(./minio --version | head -n1 | awk '{print $3}')}.sha256sum"
+            sha256sum "minio-${arch}.${RELEASE_TAG:-$(./minio --version | head -n1 | awk '{print $3}')}" > "minio-${arch}.${RELEASE_TAG:-$(./minio --version | head -n1 | awk '{print $3}')}.sha256sum"
           done
 
           # Download mc client for amd64 (used in tests)
