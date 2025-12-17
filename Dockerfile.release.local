@@ -36,8 +36,9 @@ RUN cd /go/bin && \
     mv minio-${TARGETARCH}.${RELEASE} minio
 
 # optionally include download-static-curl script if present and make static curl
+# this is optional - if it fails, we already have curl from apk
 COPY dockerscripts/download-static-curl.sh /build/download-static-curl
-RUN chmod +x /build/download-static-curl && /build/download-static-curl
+RUN chmod +x /build/download-static-curl && /build/download-static-curl || echo "Static curl download failed or not available for this architecture, using system curl"
 
 FROM registry.access.redhat.com/ubi9/ubi-micro:latest
 
