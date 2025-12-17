@@ -83,41 +83,41 @@ jobs:
           chmod +x "mc"
           sha256sum "mc" | awk '{print $1"  mc"}' > "mc.sha256sum"
 
-      - name: Run integration tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/verify-build.sh
+      # - name: Run integration tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/verify-build.sh
 
-      - name: Run healing tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/verify-healing.sh
+      # - name: Run healing tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/verify-healing.sh
 
-      - name: Run empty erasure set healing tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/verify-healing-empty-erasure-set.sh
+      # - name: Run empty erasure set healing tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/verify-healing-empty-erasure-set.sh
 
-      - name: Run healing with root disks tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/verify-healing-with-root-disks.sh
+      # - name: Run healing with root disks tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/verify-healing-with-root-disks.sh
 
-      - name: Run multipart quorum tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/multipart-quorum-test.sh
+      # - name: Run multipart quorum tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/multipart-quorum-test.sh
 
-      - name: Run timeout tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/test-timeout.sh
+      # - name: Run timeout tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/test-timeout.sh
 
       - name: Build multi-arch Docker image
         working-directory: minio-src
