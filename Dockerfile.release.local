@@ -8,20 +8,19 @@ ENV CGO_ENABLED=0
 
 WORKDIR /build
 
-RUN apk add -U --no-cache ca-certificates bash && \
-    go install aead.dev/minisign/cmd/minisign@v0.2.1
+RUN apk add -U --no-cache ca-certificates bash
 
-#   minio-amd64.<RELEASE>
-#   minio-amd64.<RELEASE>.minisig
-#   minio-amd64.<RELEASE>.sha256sum
+# Expected artifacts (prepared by CI/workflow):
+#   minio.<RELEASE>
+#   minio.<RELEASE>.sha256sum
 
-COPY minio-${TARGETARCH}.${RELEASE} /go/bin/minio
-COPY minio-${TARGETARCH}.${RELEASE}.sha256sum /go/bin/minio.sha256sum
+COPY minio.${RELEASE} /go/bin/minio
+COPY minio.${RELEASE}.sha256sum /go/bin/minio.sha256sum
 
-COPY mc-${TARGETARCH} /go/bin/mc
-COPY mc-${TARGETARCH}.sha256sum /go/bin/mc.sha256sum
+COPY mc /go/bin/mc
+COPY mc.sha256sum /go/bin/mc.sha256sum
 
-RUN cd /go/bin && sha256sum -c minio.sha256sum && sha256sum -c mc.sha256sum
+RUN cd /go/bin && sha256sum -c minio.${RELEASE}.sha256sum && sha256sum -c mc.sha256sum
 
 FROM alpine:3.22
 

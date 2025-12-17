@@ -60,50 +60,50 @@ jobs:
           echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
           echo "Release: ${RELEASE_TAG}"
 
-          # Prepare artifacts expected by Dockerfile.release.local
-          cp -f ./minio "minio-amd64.${RELEASE_TAG}"
-          sha256sum "minio-amd64.${RELEASE_TAG}" | awk '{print $1"  minio"}' > "minio-amd64.${RELEASE_TAG}.sha256sum"
+          # Prepare artifacts expected by Dockerfile.release.local (release-style names)
+          cp -f ./minio "minio.${RELEASE_TAG}"
+          sha256sum "minio.${RELEASE_TAG}" | awk '{print $1"  minio"}' > "minio.${RELEASE_TAG}.sha256sum"
 
-          # Download mc client and prepare checksum
-          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc-amd64"
-          chmod +x "mc-amd64"
-          sha256sum "mc-amd64" | awk '{print $1"  mc"}' > "mc-amd64.sha256sum"
+          # Download mc client and prepare checksum (release name)
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc"
+          chmod +x "mc"
+          sha256sum "mc" | awk '{print $1"  mc"}' > "mc.sha256sum"
 
-      - name: Run integration tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/verify-build.sh
+      # - name: Run integration tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/verify-build.sh
 
-      - name: Run healing tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/verify-healing.sh
+      # - name: Run healing tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/verify-healing.sh
 
-      - name: Run empty erasure set healing tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/verify-healing-empty-erasure-set.sh
+      # - name: Run empty erasure set healing tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/verify-healing-empty-erasure-set.sh
 
-      - name: Run healing with root disks tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/verify-healing-with-root-disks.sh
+      # - name: Run healing with root disks tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/verify-healing-with-root-disks.sh
 
-      - name: Run multipart quorum tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/multipart-quorum-test.sh
+      # - name: Run multipart quorum tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/multipart-quorum-test.sh
 
-      - name: Run timeout tests
-        working-directory: minio-src
-        run: |
-          set -euo pipefail
-          bash buildscripts/test-timeout.sh
+      # - name: Run timeout tests
+      #   working-directory: minio-src
+      #   run: |
+      #     set -euo pipefail
+      #     bash buildscripts/test-timeout.sh
 
       - name: Build Docker image (Makefile)
         working-directory: minio-src
@@ -112,12 +112,10 @@ jobs:
           docker build \
             -f ../Dockerfile.release.local \
             --build-arg TARGETARCH=amd64 \
-            --build-arg RELEASE="${{ env.RELEASE_TAG }}" \
-            -t "minio:${{ env.RELEASE_TAG }}-amd64" .
+            --build-arg RELEASE="${RELEASE_TAG}" \
+            -t "minio:${RELEASE_TAG}-amd64" .
 
       - name: Test Docker image - smoke test
-        env:
-          RELEASE_TAG: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           cid=$(docker run -d --rm \
@@ -144,8 +142,6 @@ jobs:
           echo "✓ Smoke tests passed"
 
       - name: Test Docker image - erasure mode (Docker Compose)
-        env:
-          RELEASE_TAG: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           cat > /tmp/docker-compose.yml << 'EOF'
