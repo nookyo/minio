@@ -15,7 +15,7 @@ RUN apk add -U --no-cache ca-certificates bash
 #   minio.<RELEASE>.sha256sum
 
 COPY minio.${RELEASE} /go/bin/minio
-COPY minio.${RELEASE}.sha256sum /go/bin/minio.sha256sum
+COPY minio.${RELEASE}.sha256sum /go/bin/minio.${RELEASE}.sha256sum
 
 COPY mc /go/bin/mc
 COPY mc.sha256sum /go/bin/mc.sha256sum
