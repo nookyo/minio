@@ -8,30 +8,43 @@ ENV CGO_ENABLED=0
 
 WORKDIR /build
 
-RUN apk add -U --no-cache ca-certificates bash
+# Install tools and create static curl for final image (optional, mirrors release)
+RUN apk add -U --no-cache ca-certificates curl bash && \
+    apk add -U --no-cache --virtual .build-deps curl-dev && \
+    # copy helper to fetch a static curl if present in repo
+    true
 
 # Expected artifacts (prepared by CI/workflow):
 #   minio.<RELEASE>
 #   minio.<RELEASE>.sha256sum
+#   mc
+#   mc.sha256sum
 
+# copy locally-built binaries into build stage
 COPY minio.${RELEASE} /go/bin/minio
 COPY minio.${RELEASE}.sha256sum /go/bin/minio.${RELEASE}.sha256sum
 
 COPY mc /go/bin/mc
 COPY mc.sha256sum /go/bin/mc.sha256sum
 
+# verify checksums (integrity check only)
 RUN cd /go/bin && sha256sum -c minio.${RELEASE}.sha256sum && sha256sum -c mc.sha256sum
 
-FROM alpine:3.22
+# optionally include download-static-curl script if present and make static curl
+COPY dockerscripts/download-static-curl.sh /build/download-static-curl
+RUN if [ -f /build/download-static-curl ]; then chmod +x /build/download-static-curl && /build/download-static-curl; fi || true
+
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest
 
 ARG RELEASE
 
-LABEL name="MinIO-Custom" \
-      vendor="Custom Build" \
+LABEL name="MinIO" \
+      vendor="MinIO Inc <dev@min.io>" \
+      maintainer="MinIO Inc <dev@min.io>" \
       version="${RELEASE}" \
-      summary="MinIO with custom patches - S3-compatible object storage"
-
-RUN apk add -U --no-cache ca-certificates bash
+      release="${RELEASE}" \
+      summary="MinIO is a High Performance Object Storage, API compatible with Amazon S3 cloud storage service." \
+      description="MinIO object storage is fundamentally different. Designed for performance and the S3 API, it is 100% open-source. MinIO is ideal for large, private cloud environments with stringent security requirements and delivers mission-critical availability across a diverse range of workloads."
 
 ENV MINIO_ACCESS_KEY_FILE=access_key \
     MINIO_SECRET_KEY_FILE=secret_key \
@@ -41,8 +54,17 @@ ENV MINIO_ACCESS_KEY_FILE=access_key \
     MINIO_CONFIG_ENV_FILE=config.env \
     MC_CONFIG_DIR=/tmp/.mc
 
+RUN chmod -R 777 /usr/bin || true
+
+# copy CA certs from build stage if present
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# copy minio and mc from build stage
 COPY --from=build /go/bin/minio* /usr/bin/
 COPY --from=build /go/bin/mc* /usr/bin/
+
+# copy curl from build stage if produced by download-static-curl
+COPY --from=build /go/bin/curl* /usr/bin/
 
 COPY CREDITS /licenses/CREDITS
 COPY LICENSE /licenses/LICENSE

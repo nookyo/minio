@@ -109,8 +109,7 @@ jobs:
         working-directory: minio-src
         run: |
           set -euo pipefail
-          docker build \
-            -f ../Dockerfile.release.local \
+          docker build -f ../Dockerfile.release.local \
             --build-arg TARGETARCH=amd64 \
             --build-arg RELEASE="${RELEASE_TAG}" \
             -t "minio:${RELEASE_TAG}-amd64" .
