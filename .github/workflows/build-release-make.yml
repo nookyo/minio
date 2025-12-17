@@ -60,6 +60,15 @@ jobs:
           echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
           echo "Release: ${RELEASE_TAG}"
 
+          # Prepare artifacts expected by Dockerfile.release.local
+          cp -f ./minio "minio-amd64.${RELEASE_TAG}"
+          sha256sum "minio-amd64.${RELEASE_TAG}" | awk '{print $1"  minio"}' > "minio-amd64.${RELEASE_TAG}.sha256sum"
+
+          # Download mc client and prepare checksum
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/mc" -o "mc-amd64"
+          chmod +x "mc-amd64"
+          sha256sum "mc-amd64" | awk '{print $1"  mc"}' > "mc-amd64.sha256sum"
+
       - name: Run integration tests
         working-directory: minio-src
         run: |
