@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
 
     steps:
       - name: Checkout this repo
@@ -119,35 +120,33 @@ jobs:
       #     set -euo pipefail
       #     bash buildscripts/test-timeout.sh
 
-      - name: Build Docker image for testing (amd64 only)
-        uses: docker/build-push-action@v6
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          context: ./minio-src
-          file: ./Dockerfile.release.local
-          platforms: linux/amd64
-          load: true
-          tags: |
-            minio:${{ env.RELEASE_TAG }}
-            minio:latest
-          build-args: |
-            RELEASE=${{ env.RELEASE_TAG }}
-            TARGETARCH=amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build multi-arch Docker images
+      - name: Build and push multi-arch Docker image
         uses: docker/build-push-action@v6
         with:
           context: ./minio-src
           file: ./Dockerfile.release.local
           platforms: linux/amd64,linux/arm64
-          push: false
+          push: true
           tags: |
-            minio:${{ env.RELEASE_TAG }}-multiarch
+            ghcr.io/${{ github.repository_owner }}/minio:${{ env.RELEASE_TAG }}
+            ghcr.io/${{ github.repository_owner }}/minio:latest
           build-args: |
             RELEASE=${{ env.RELEASE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Pull multi-arch image for testing
+        run: |
+          docker pull ghcr.io/${{ github.repository_owner }}/minio:${{ env.RELEASE_TAG }}
+          docker tag ghcr.io/${{ github.repository_owner }}/minio:${{ env.RELEASE_TAG }} minio:${{ env.RELEASE_TAG }}
+          docker tag ghcr.io/${{ github.repository_owner }}/minio:${{ env.RELEASE_TAG }} minio:latest
 
       - name: Test Docker image - smoke test
         run: |
