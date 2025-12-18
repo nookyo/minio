@@ -128,15 +128,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push multi-arch Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v6.18.0
         with:
           context: ./minio-src
           file: ./Dockerfile.release.local
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/minio:${{ env.RELEASE_TAG }}
-            ghcr.io/${{ github.repository_owner }}/minio:latest
+            ghcr.io/${{ github.repository_owner }}/qubersip-minio:${{ env.RELEASE_TAG }}
+            ghcr.io/${{ github.repository_owner }}/qubersip-minio:latest
           build-args: |
             RELEASE=${{ env.RELEASE_TAG }}
           cache-from: type=gha
@@ -144,9 +144,9 @@ jobs:
 
       - name: Pull multi-arch image for testing
         run: |
-          docker pull ghcr.io/${{ github.repository_owner }}/minio:${{ env.RELEASE_TAG }}
-          docker tag ghcr.io/${{ github.repository_owner }}/minio:${{ env.RELEASE_TAG }} minio:${{ env.RELEASE_TAG }}
-          docker tag ghcr.io/${{ github.repository_owner }}/minio:${{ env.RELEASE_TAG }} minio:latest
+          docker pull ghcr.io/${{ github.repository_owner }}/qubersip-minio:${{ env.RELEASE_TAG }}
+          docker tag ghcr.io/${{ github.repository_owner }}/qubersip-minio:${{ env.RELEASE_TAG }} qubersip-minio:${{ env.RELEASE_TAG }}
+          docker tag ghcr.io/${{ github.repository_owner }}/qubersip-minio:${{ env.RELEASE_TAG }} qubersip-minio:latest
 
       - name: Test Docker image - smoke test
         run: |
@@ -155,7 +155,7 @@ jobs:
             -p 9000:9000 -p 9001:9001 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
-            "minio:${RELEASE_TAG}" server /data --console-address ":9001")
+            "qubersip-minio:${RELEASE_TAG}" server /data --console-address ":9001")
 
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
@@ -181,7 +181,7 @@ jobs:
           version: '3.7'
           services:
             minio1:
-              image: "minio:REPLACE_TAG"
+              image: "qubersip-minio:REPLACE_TAG"
               ports:
                 - "9000:9000"
               environment:
@@ -193,7 +193,7 @@ jobs:
               networks:
                 - minio-net
             minio2:
-              image: "minio:REPLACE_TAG"
+              image: "qubersip-minio:REPLACE_TAG"
               ports:
                 - "9001:9000"
               environment:
@@ -205,7 +205,7 @@ jobs:
               networks:
                 - minio-net
             minio3:
-              image: "minio:REPLACE_TAG"
+              image: "qubersip-minio:REPLACE_TAG"
               ports:
                 - "9002:9000"
               environment:
@@ -217,7 +217,7 @@ jobs:
               networks:
                 - minio-net
             minio4:
-              image: "minio:REPLACE_TAG"
+              image: "qubersip-minio:REPLACE_TAG"
               ports:
                 - "9003:9000"
               environment:
