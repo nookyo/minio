@@ -145,8 +145,7 @@ jobs:
       - name: Pull multi-arch image for testing
         run: |
           docker pull ghcr.io/${{ github.repository_owner }}/qubersip-minio:${{ env.RELEASE_TAG }}
-          docker tag ghcr.io/${{ github.repository_owner }}/qubersip-minio:${{ env.RELEASE_TAG }} qubersip-minio:${{ env.RELEASE_TAG }}
-          docker tag ghcr.io/${{ github.repository_owner }}/qubersip-minio:${{ env.RELEASE_TAG }} qubersip-minio:latest
+          docker images
 
       - name: Test Docker image - smoke test
         run: |
@@ -155,7 +154,7 @@ jobs:
             -p 9000:9000 -p 9001:9001 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
-            "qubersip-minio:${RELEASE_TAG}" server /data --console-address ":9001")
+            "ghcr.io/${{ github.repository_owner }}/qubersip-minio:${RELEASE_TAG}" server /data --console-address ":9001"))
 
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/minio/health/ready || true)
@@ -181,7 +180,7 @@ jobs:
           version: '3.7'
           services:
             minio1:
-              image: "qubersip-minio:REPLACE_TAG"
+              image: "ghcr.io/REPLACE_OWNER/qubersip-minio:REPLACE_TAG"
               ports:
                 - "9000:9000"
               environment:
@@ -193,7 +192,7 @@ jobs:
               networks:
                 - minio-net
             minio2:
-              image: "qubersip-minio:REPLACE_TAG"
+              image: "ghcr.io/REPLACE_OWNER/qubersip-minio:REPLACE_TAG"
               ports:
                 - "9001:9000"
               environment:
@@ -205,7 +204,7 @@ jobs:
               networks:
                 - minio-net
             minio3:
-              image: "qubersip-minio:REPLACE_TAG"
+              image: "ghcr.io/REPLACE_OWNER/qubersip-minio:REPLACE_TAG"
               ports:
                 - "9002:9000"
               environment:
@@ -217,7 +216,7 @@ jobs:
               networks:
                 - minio-net
             minio4:
-              image: "qubersip-minio:REPLACE_TAG"
+              image: "ghcr.io/REPLACE_OWNER/qubersip-minio:REPLACE_TAG"
               ports:
                 - "9003:9000"
               environment:
@@ -233,7 +232,8 @@ jobs:
               driver: bridge
           EOF
 
-          # Replace tag placeholder
+          # Replace placeholders
+          sed -i "s/REPLACE_OWNER/${{ github.repository_owner }}/g" /tmp/docker-compose.yml
           sed -i "s/REPLACE_TAG/${RELEASE_TAG}/g" /tmp/docker-compose.yml
 
           docker compose -f /tmp/docker-compose.yml up -d
